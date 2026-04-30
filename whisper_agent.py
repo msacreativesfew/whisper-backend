@@ -391,13 +391,7 @@ def _make_openai_llm() -> lk_openai.LLM:
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
         raise RuntimeError("OpenAI LLM requested but OPENAI_API_KEY is not configured.")
-
-    logger.info("Creating OpenAI LLM using model %s", OPENAI_LLM_MODEL)
-    return lk_openai.LLM(
-        model=OPENAI_LLM_MODEL,
-        api_key=api_key,
-    )
-
+    return lk_openai.LLM(model=OPENAI_LLM_MODEL, api_key=api_key)
 
 def _make_llm():
     """Create the configured LLM with fallback so quota/rate-limit issues don't stall turns."""
@@ -406,71 +400,34 @@ def _make_llm():
     has_openai = bool(os.getenv("OPENAI_API_KEY"))
 
     if not has_google and not has_groq and not has_openai:
-        raise RuntimeError(
-            "No LLM provider configured. Set GOOGLE_API_KEY, OPENAI_API_KEY, or GROQ_API_KEY/GROQ_API_KEY_1."
-        )
+        raise RuntimeError("No LLM provider configured.")
 
-    preferred_order: list[str]
-    if LLM_PROVIDER == "gemini":
-        preferred_order = ["gemini", "groq", "openai"]
-    elif LLM_PROVIDER == "groq":
-        preferred_order = ["groq", "openai", "gemini"]
-    elif LLM_PROVIDER == "openai":
-        preferred_order = ["openai", "groq", "gemini"]
-    else:
-        if has_groq:
-            preferred_order = ["groq", "openai", "gemini"]
-        elif has_openai:
-            preferred_order = ["openai", "groq", "gemini"]
-        else:
-            preferred_order = ["gemini", "groq", "openai"]
-
-    llms: list = []
-    for provider_name in preferred_order:
-        if provider_name == "groq" and has_groq:
-            for idx, key in enumerate(_GROQ_KEYS):
-                llms.append(_make_groq_llm(api_key=key, key_index=idx))
-        elif provider_name == "gemini" and has_google:
-            llms.append(_make_google_llm())
-        elif provider_name == "openai" and has_openai:
-            llms.append(_make_openai_llm())
-
-    if not llms:
-        raise RuntimeError("Unable to build LLM configuration from environment settings.")
+    preferred_order = ["groq", "gemini", "openai"]
+    llms = []
+    if has_groq:
+        for idx, key in enumerate(_GROQ_KEYS):
+            llms.append(_make_groq_llm(api_key=key, key_index=idx))
+    if has_google:
+        llms.append(_make_google_llm())
+    if has_openai:
+        llms.append(_make_openai_llm())
 
     if len(llms) == 1:
         return llms[0]
 
-    timeout_raw = os.getenv("LLM_ATTEMPT_TIMEOUT", "12.0")
-    try:
-        attempt_timeout = max(MIN_LLM_ATTEMPT_TIMEOUT, float(timeout_raw))
-    except ValueError:
-        attempt_timeout = 12.0
-
-    chain = " -> ".join(f"{llm.provider}:{llm.model}" for llm in llms)
-    logger.warning(
-        "LLM failover chain enabled (%s). Preferred provider: %s. Attempt timeout: %.1fs",
-        chain,
-        LLM_PROVIDER,
-        attempt_timeout,
-    )
     return lk_llm.FallbackAdapter(
         llm=llms,
-        attempt_timeout=attempt_timeout,
+        attempt_timeout=12.0,
         max_retry_per_llm=0,
-        retry_interval=0.2,
-        retry_on_chunk_sent=False,
     )
 
 
 def _make_stt() -> deepgram.STT:
-    """Build a streaming-safe STT config for the installed Deepgram plugin."""
+    """Build a streaming-safe STT config."""
     return deepgram.STT(
-        model="nova-3",
+        model="nova-2-general",
         language="en-US",
-        detect_language=False,
         interim_results=True,
-        punctuate=True,
         smart_format=True,
         no_delay=True,
     )
@@ -553,6 +510,16 @@ async def entrypoint(ctx: JobContext):
     def on_interrupted():
         logger.info("Agent speech was interrupted by user")
 
+    # ── Room Event Logging ──────────────────────────────────────────────────
+    @ctx.room.on("participant_connected")
+    def on_p_conn(p):
+        logger.info("PARTICIPANT CONNECTED: %s (%s)", p.identity, p.name)
+
+    @ctx.room.on("track_subscribed")
+    def on_track_sub(track, pub, p):
+        if track.kind == "audio":
+            logger.info("SUBSCRIBED to audio track from %s. Identity: %s", p.identity, p.identity)
+
     # ── Start session ────────────────────────────────────────────────────────
     await session.start(
         agent=agent,
@@ -561,8 +528,6 @@ async def entrypoint(ctx: JobContext):
             text_enabled=True,
             audio_enabled=True,
             close_on_disconnect=False,
-            # Send user STT transcripts to the room so frontend sees them
-            noise_cancellation=None,
         ),
         room_output_options=room_io.RoomOutputOptions(
             audio_enabled=True,

@@ -262,6 +262,26 @@ export function useVoiceAssistant() {
         }
       });
 
+      room.on(LivekitClient.RoomEvent.DataReceived, (payload: Uint8Array) => {
+        const str = new TextDecoder().decode(payload);
+        try {
+          const data = JSON.parse(str);
+          if (data.type === "command" && (window as any).pywebview?.api) {
+            const api = (window as any).pywebview.api;
+            console.log("[Whisper] Received remote command:", data.command, data.data);
+            if (data.command === "open_url") {
+              api.open_url(data.data.url);
+            } else if (data.command === "open_app") {
+              api.open_app(data.data.name);
+            } else if (data.command === "take_screenshot") {
+              api.take_screenshot();
+            }
+          }
+        } catch (e) {
+          console.error("[Whisper] Failed to parse data message:", e);
+        }
+      });
+
       room.on(LivekitClient.RoomEvent.Disconnected, () => {
         console.log("[Whisper] Disconnected");
         detachRemoteAudio();
@@ -292,7 +312,7 @@ export function useVoiceAssistant() {
         return;
       }
 
-      setStatus("idle");
+      setStatus("listening");
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.error("[Whisper] Connection failed:", {

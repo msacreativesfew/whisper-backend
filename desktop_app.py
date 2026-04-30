@@ -557,6 +557,68 @@ class Api:
         print("[Backend] Services stopped successfully.")
         return True
 
+    def open_url(self, url: str):
+        """Open a URL in the default browser."""
+        print(f"[API] Opening URL: {url}")
+        webbrowser.open(url)
+        return True
+
+    def open_app(self, name: str):
+        """Open a local application."""
+        print(f"[API] Opening App: {name}")
+        import shutil
+        app_name = name.lower().strip()
+        
+        app_map = {
+            "whatsapp": [("uri", "whatsapp:"), ("url", "https://web.whatsapp.com/")],
+            "chrome": [("exe", "chrome.exe"), ("url", "https://www.google.com/")],
+            "browser": [("url", "https://www.google.com/")],
+            "youtube": [("url", "https://www.youtube.com/")],
+            "notepad": [("exe", "notepad.exe")],
+            "calculator": [("exe", "calc.exe")],
+            "calc": [("exe", "calc.exe")],
+            "explorer": [("exe", "explorer.exe")],
+            "files": [("exe", "explorer.exe")],
+            "settings": [("uri", "ms-settings:")],
+        }
+
+        candidates = app_map.get(app_name)
+        if not candidates:
+            return False
+
+        for kind, value in candidates:
+            try:
+                if kind == "exe":
+                    exe = shutil.which(value) or value
+                    subprocess.Popen([exe])
+                elif kind == "uri":
+                    os.startfile(value)
+                else:
+                    webbrowser.open(value)
+                return True
+            except Exception as e:
+                print(f"[API] Error opening {name}: {e}")
+                continue
+        return False
+
+    def take_screenshot(self):
+        """Take a screenshot and save it locally."""
+        print("[API] Taking screenshot")
+        try:
+            from PIL import ImageGrab
+            import datetime
+            shot_dir = os.path.join(self.base_dir, "screenshots")
+            os.makedirs(shot_dir, exist_ok=True)
+            ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            path = os.path.join(shot_dir, f"screenshot_{ts}.png")
+            img = ImageGrab.grab()
+            img.save(path)
+            print(f"[API] Screenshot saved to {path}")
+            return True
+        except Exception as e:
+            print(f"[API] Screenshot failed: {e}")
+            return False
+
     def restart(self):
         print("[Backend] Restart requested.")
         self.disconnect(clear_logs=True)
