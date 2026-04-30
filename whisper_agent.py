@@ -157,272 +157,117 @@ def _save_profile(profile: dict):
         logger.error("Failed to save profile: %s", e)
 
 
-def _open_target(target: str) -> None:
-    if sys.platform == "win32":
-        os.startfile(target)
-        return
-    webbrowser.open(target)
+def _send_remote_command(ctx: JobContext, command: str, data: dict):
+    """Send a command to the local desktop app via LiveKit Data Channel."""
+    import json
+    payload = json.dumps({"type": "command", "command": command, "data": data})
+    asyncio.create_task(ctx.room.local_participant.publish_data(payload))
+    logger.info("Sent remote command: %s", command)
 
+async def _launch_app_remote(ctx: JobContext, app_name: str) -> tuple[bool, str]:
+    """Ask the desktop app to open an application."""
+    _send_remote_command(ctx, "open_app", {"name": app_name})
+    return True, f"I've sent a request to your desktop to open {app_name}."
 
-def _clean_phone_number(phone_number: str | None) -> str:
-    raw = (phone_number or WHATSAPP_DEFAULT_PHONE or "").strip()
-    return "".join(ch for ch in raw if ch.isdigit())
-
-
-def _launch_app(app_name: str) -> tuple[bool, str]:
-    name = app_name.strip().lower()
-
-    app_map = {
-        "whatsapp": [("uri", "whatsapp:"), ("url", "https://web.whatsapp.com/")],
-        "chrome": [("exe", "chrome.exe"), ("url", "https://www.google.com/")],
-        "browser": [("url", "https://www.google.com/")],
-        "youtube": [("url", "https://www.youtube.com/")],
-        "notepad": [("exe", "notepad.exe")],
-        "calculator": [("exe", "calc.exe")],
-        "calc": [("exe", "calc.exe")],
-        "explorer": [("exe", "explorer.exe")],
-        "files": [("exe", "explorer.exe")],
-        "settings": [("uri", "ms-settings:")],
-    }
-
-    candidates = app_map.get(name)
-    if not candidates:
-        return False, f"I don't have a launcher preset for {app_name} yet."
-
-    last_error = None
-    for kind, value in candidates:
-        try:
-            if kind == "exe":
-                exe = shutil.which(value) or value
-                subprocess.Popen([exe])
-            else:
-                _open_target(value)
-            return True, f"Opened {app_name}."
-        except Exception as e:
-            last_error = e
-
-    return False, f"Failed to open {app_name}: {last_error}"
-
+async def _open_url_remote(ctx: JobContext, url: str) -> tuple[bool, str]:
 # ---------------------------------------------------------------------------
 # Tools
 # ---------------------------------------------------------------------------
 
-@lk_llm.function_tool
-async def save_user_profile(
-    name: str | None = None,
-    title: str | None = None,
-) -> str:
-    """Save or update the user's name and preferred title (e.g. Sir, Ma'am, Doctor, etc.)."""
-    profile = _load_profile()
-    if name:  profile["name"]  = name.strip()
-    if title: profile["title"] = title.strip()
-    _save_profile(profile)
-    logger.info("Profile updated: %s", profile)
-    return f"Profile saved. Name: {profile.get('name')}, Title: {profile.get('title')}."
+class AssistantTools(lk_llm.FunctionContext):
+    def __init__(self, room):
+        super().__init__()
+        self.room = room
 
-@lk_llm.function_tool
-async def store_memory(fact: str) -> str:
-    """Store an important fact about the user for long-term memory."""
-    import httpx
-    supabase_url = os.getenv("SUPABASE_URL")
-    supabase_key = os.getenv("SUPABASE_API_KEY")
-    if not supabase_url or not supabase_key:
-        return "Supabase credentials are not configured."
-    
-    headers = {
-        "apikey": supabase_key,
-        "Authorization": f"Bearer {supabase_key}",
-        "Content-Type": "application/json",
-        "Prefer": "return=minimal"
-    }
-    
-    data = {"fact": fact}
-    
-    try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.post(f"{supabase_url}/rest/v1/memories", headers=headers, json=data)
-            if resp.status_code in [200, 201]:
-                return f"Memory stored successfully: {fact}"
-            else:
-                return f"Failed to store memory. Status code: {resp.status_code}"
-    except Exception as e:
-        return f"Memory storage failed: {e}"
+    def _send_remote_command(self, command: str, data: dict):
+        """Send a command to the local desktop app via LiveKit Data Channel."""
+        import json
+        payload = json.dumps({"type": "command", "command": command, "data": data})
+        # Publish data to the room
+        asyncio.create_task(self.room.local_participant.publish_data(payload))
+        logger.info("Sent remote command: %s", command)
 
-@lk_llm.function_tool
-async def retrieve_memories() -> str:
-    """Retrieve the most recent facts and memories about the user."""
-    import httpx
-    supabase_url = os.getenv("SUPABASE_URL")
-    supabase_key = os.getenv("SUPABASE_API_KEY")
-    if not supabase_url or not supabase_key:
-        return "Supabase credentials are not configured."
-    
-    headers = {
-        "apikey": supabase_key,
-        "Authorization": f"Bearer {supabase_key}",
-    }
-    
-    try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.get(
-                f"{supabase_url}/rest/v1/memories?select=fact,created_at&order=created_at.desc&limit=20",
-                headers=headers
-            )
-            if resp.status_code == 200:
-                memories = resp.json()
-                if not memories:
-                    return "No long-term memories found."
-                
-                output = "Recent memories:\n"
-                for m in memories:
-                    output += f"- {m['fact']} (stored at {m['created_at']})\n"
-                return output
-            else:
-                return f"Failed to retrieve memories. Status code: {resp.status_code}"
-    except Exception as e:
-        return f"Memory retrieval failed: {e}"
+    @lk_llm.function_tool
+    async def save_user_profile(
+        self,
+        name: str | None = None,
+        title: str | None = None,
+    ) -> str:
+        """Save or update the user's name and preferred title (e.g. Sir, Ma'am, Doctor, etc.)."""
+        profile = _load_profile()
+        if name:  profile["name"]  = name.strip()
+        if title: profile["title"] = title.strip()
+        _save_profile(profile)
+        logger.info("Profile updated: %s", profile)
+        return f"Profile saved. Name: {profile.get('name')}, Title: {profile.get('title')}."
 
-
-@lk_llm.function_tool
-async def get_weather(city: str) -> str:
-    """Get current real-time weather for any city in the world."""
-    import httpx
-    try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            geo_r = await client.get(
-                "https://geocoding-api.open-meteo.com/v1/search",
-                params={"name": city, "count": 1, "format": "json"},
-            )
-            geo = geo_r.json().get("results", [])
-            if not geo:
-                return f"City not found: {city}"
-            r         = geo[0]
-            lat, lon  = r["latitude"], r["longitude"]
-            city_name = r["name"]
-            country   = r.get("country", "")
-
-            w_r = await client.get(
-                "https://api.open-meteo.com/v1/forecast",
-                params={
-                    "latitude": lat, "longitude": lon,
-                    "current": "temperature_2m,weather_code,wind_speed_10m,relative_humidity_2m",
-                    "timezone": "auto",
-                },
-            )
-            w        = w_r.json()["current"]
-            temp     = w["temperature_2m"]
-            humidity = w["relative_humidity_2m"]
-            wind     = w["wind_speed_10m"]
-            code     = w["weather_code"]
-
-            WX = {
-                0: "clear sky", 1: "mainly clear", 2: "partly cloudy", 3: "overcast",
-                45: "foggy", 48: "icy fog", 51: "light drizzle", 53: "drizzle",
-                61: "light rain", 63: "rain", 65: "heavy rain",
-                71: "light snow", 73: "snow", 75: "heavy snow",
-                80: "rain showers", 81: "showers", 82: "heavy showers",
-                95: "thunderstorm", 96: "thunderstorm with hail", 99: "heavy thunderstorm",
-            }
-            desc = WX.get(code, "mixed conditions")
-
-            return (
-                f"Weather in {city_name}, {country}: {desc}. "
-                f"Temperature {temp}°C, humidity {humidity}%, wind {wind} km/h."
-            )
-    except Exception as e:
-        return f"Weather fetch failed: {e}"
-
-
-@lk_llm.function_tool
-async def search_web(query: str) -> str:
-    """Search the web for real-time information, news, or facts."""
-    try:
-        from duckduckgo_search import DDGS
-        snippets = []
-        with DDGS() as ddgs:
-            for r in ddgs.text(query, max_results=3):
-                snippets.append(f"{r['title']}: {r['body'][:250]}")
-        return " | ".join(snippets) if snippets else "No results found."
-    except Exception as e:
-        return f"Web search failed: {e}"
-
-
-@lk_llm.function_tool
-async def search_youtube(query: str) -> str:
-    """Search for a song or video on YouTube by opening the browser."""
-    import urllib.parse
-    url = f"https://www.youtube.com/results?search_query={urllib.parse.quote(query)}"
-    webbrowser.open(url)
-    logger.info("Opened YouTube: %s", url)
-    return f"Opened YouTube search for: {query}"
-
-
-@lk_llm.function_tool
-async def open_application(app_name: str) -> str:
-    """Open a supported desktop application such as WhatsApp, Chrome, Notepad, Calculator, Explorer, or Settings."""
-    ok, message = _launch_app(app_name)
-    return message
-
-
-@lk_llm.function_tool
-async def open_whatsapp() -> str:
-    """Open WhatsApp Desktop or WhatsApp Web."""
-    ok, message = _launch_app("whatsapp")
-    return message
-
-
-@lk_llm.function_tool
-async def send_whatsapp_message(message: str, phone_number: str | None = None) -> str:
-    """Open a WhatsApp chat with a prefilled message for the given phone number or configured default number."""
-    phone = _clean_phone_number(phone_number)
-    if not phone:
-        return "No WhatsApp phone number is configured. Set WHATSAPP_DEFAULT_PHONE or provide a phone number."
-
-    text = urllib.parse.quote(message.strip())
-    url = f"https://wa.me/{phone}?text={text}"
-    try:
-        _open_target(url)
-        return f"Opened WhatsApp message draft for {phone}."
-    except Exception as e:
-        return f"Failed to open WhatsApp message draft: {e}"
-
-
-@lk_llm.function_tool
-async def start_whatsapp_call(phone_number: str | None = None, video: bool = False) -> str:
-    """Best-effort WhatsApp call helper. Opens the target chat or app for a voice or video call."""
-    phone = _clean_phone_number(phone_number)
-    if not phone:
-        return "No WhatsApp phone number is configured. Set WHATSAPP_DEFAULT_PHONE or provide a phone number."
-
-    deep_links = [
-        f"whatsapp://send?phone={phone}",
-        f"https://wa.me/{phone}",
-    ]
-    for link in deep_links:
+    @lk_llm.function_tool
+    async def search_web(self, query: str) -> str:
+        """Search the web for real-time information, news, or facts."""
         try:
-            _open_target(link)
-            call_type = "video" if video else "voice"
-            return f"Opened WhatsApp for a {call_type} call with {phone}. You may need one manual click inside WhatsApp to place the call."
-        except Exception:
-            continue
-    return f"Failed to open WhatsApp call flow for {phone}."
+            from duckduckgo_search import DDGS
+            snippets = []
+            with DDGS() as ddgs:
+                for r in ddgs.text(query, max_results=3):
+                    snippets.append(f"{r['title']}: {r['body'][:250]}")
+            return " | ".join(snippets) if snippets else "No results found."
+        except Exception as e:
+            return f"Web search failed: {e}"
 
+    @lk_llm.function_tool
+    async def search_youtube(self, query: str) -> str:
+        """Search for a song or video on YouTube by opening the browser."""
+        import urllib.parse
+        url = f"https://www.youtube.com/results?search_query={urllib.parse.quote(query)}"
+        self._send_remote_command("open_url", {"url": url})
+        return f"I've opened YouTube search for {query} on your desktop."
 
-@lk_llm.function_tool
-async def take_screenshot() -> str:
-    """Take a screenshot of the current screen and save it to the screenshots folder."""
-    try:
-        from PIL import ImageGrab
-        Path(SCREENSHOTS_DIR).mkdir(parents=True, exist_ok=True)
-        ts       = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        filepath = os.path.join(SCREENSHOTS_DIR, f"screenshot_{ts}.png")
-        img      = ImageGrab.grab()
-        img.save(filepath)
-        logger.info("Screenshot saved: %s", filepath)
-        return f"Screenshot saved as screenshot_{ts}.png"
-    except Exception as e:
-        return f"Screenshot failed: {e}"
+    @lk_llm.function_tool
+    async def open_application(self, app_name: str) -> str:
+        """Open a supported desktop application such as WhatsApp, Chrome, Notepad, Calculator, Explorer, or Settings."""
+        self._send_remote_command("open_app", {"name": app_name})
+        return f"Opening {app_name} on your computer."
 
+    @lk_llm.function_tool
+    async def open_whatsapp(self) -> str:
+        """Open WhatsApp Desktop or WhatsApp Web."""
+        self._send_remote_command("open_app", {"name": "whatsapp"})
+        return "Opening WhatsApp for you."
+
+    @lk_llm.function_tool
+    async def send_whatsapp_message(self, message: str, phone_number: str | None = None) -> str:
+        """Open a WhatsApp chat with a prefilled message on your desktop."""
+        phone = "".join(ch for ch in (phone_number or WHATSAPP_DEFAULT_PHONE or "") if ch.isdigit())
+        if not phone:
+            return "No phone number provided."
+        import urllib.parse
+        text = urllib.parse.quote(message.strip())
+        url = f"https://wa.me/{phone}?text={text}"
+        self._send_remote_command("open_url", {"url": url})
+        return f"Opening WhatsApp message draft for {phone}."
+
+    @lk_llm.function_tool
+    async def take_screenshot(self) -> str:
+        """Take a screenshot of your current desktop screen."""
+        self._send_remote_command("take_screenshot", {})
+        return "Taking a screenshot of your desktop now."
+
+    @lk_llm.function_tool
+    async def get_weather(self, city: str) -> str:
+        """Get current real-time weather for any city."""
+        import httpx
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                geo_r = await client.get("https://geocoding-api.open-meteo.com/v1/search", params={"name": city, "count": 1, "format": "json"})
+                geo = geo_r.json().get("results", [])
+                if not geo: return f"City not found: {city}"
+                r = geo[0]
+                lat, lon, city_name, country = r["latitude"], r["longitude"], r["name"], r.get("country", "")
+                w_r = await client.get("https://api.open-meteo.com/v1/forecast", params={"latitude": lat, "longitude": lon, "current": "temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m"})
+                w = w_r.json()["current"]
+                temp, humidity, wind = w["temperature_2m"], w["relative_humidity_2m"], w["wind_speed_10m"]
+                return f"Weather in {city_name}, {country}: Temperature {temp}°C, humidity {humidity}%, wind {wind} km/h."
+        except Exception as e: return f"Weather failed: {e}"
 
 @lk_llm.function_tool
 async def check_api_limits() -> str:
@@ -677,37 +522,14 @@ async def entrypoint(ctx: JobContext):
     tts = _make_tts()
     vad = silero.VAD.load()
 
+    tools = AssistantTools(ctx.room)
     agent = Agent(
         instructions=SYSTEM_PROMPT,
         stt=stt,
         llm=llm,
         tts=tts,
         vad=vad,
-        tools=[
-            save_user_profile,
-            get_weather,
-            search_web,
-            search_youtube,
-            open_application,
-            open_whatsapp,
-            send_whatsapp_message,
-            start_whatsapp_call,
-            take_screenshot,
-            check_api_limits,
-            open_world_monitor,
-            store_memory,
-            retrieve_memories,
-            google_tools.read_emails,
-            google_tools.read_email_detail,
-            google_tools.send_email,
-            google_tools.update_email_labels,
-            google_tools.delete_email,
-            google_tools.get_calendar_events,
-            google_tools.add_calendar_event,
-            google_tools.list_drive_files,
-            google_tools.get_fitness_summary,
-            google_tools.get_route_brief,
-        ],
+        fnc_ctx=tools,
     )
 
     session = AgentSession(
