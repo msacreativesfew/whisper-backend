@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Whisper MCP Server Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+            color: #fff;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 40px;
+            animation: fadeIn 0.8s ease-in;
+        }
+
+        h1 {
+            font-size: 3em;
+            background: linear-gradient(45deg, #ff6b6b, #ffd93d, #6bcf7f);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 10px;
+            text-shadow: 0 0 20px rgba(255, 107, 107, 0.3);
+        }
+
+        .subtitle {
+            font-size: 1.1em;
+            color: #aaa;
+        }
+
+        .status-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(255, 255, 255, 0.05);
+            padding: 15px 20px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            border-left: 4px solid #6bcf7f;
+        }
+
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            background: #6bcf7f;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .tools-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 20px;
+        }
+
+        .tool-card {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 25px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            animation: slideUp 0.5s ease-out;
+        }
+
+        .tool-card:hover {
+            background: rgba(255, 255, 255, 0.12);
+            border-color: rgba(255, 107, 107, 0.5);
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(255, 107, 107, 0.2);
+        }
+
+        .tool-icon {
+            font-size: 2.5em;
+            margin-bottom: 15px;
+        }
+
+        .tool-title {
+            font-size: 1.3em;
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: #ffd93d;
+        }
+
+        .tool-desc {
+            font-size: 0.95em;
+            color: #bbb;
+            line-height: 1.5;
+            margin-bottom: 15px;
+        }
+
+        button {
+            background: linear-gradient(45deg, #ff6b6b, #ff8787);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.9em;
+            font-weight: 600;
+            transition: all 0.3s;
+            width: 100%;
+        }
+
+        button:hover {
+            background: linear-gradient(45deg, #ff8787, #ffb3b3);
+            transform: scale(1.05);
+        }
+
+        button:active {
+            transform: scale(0.98);
+        }
+
+        .output {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 15px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-size: 0.85em;
+            line-height: 1.6;
+            border-left: 3px solid #6bcf7f;
+        }
+
+        .loading {
+            display: none;
+            color: #ffd93d;
+        }
+
+        .server-info {
+            background: rgba(107, 199, 127, 0.1);
+            border-left: 3px solid #6bcf7f;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            font-size: 0.9em;
+        }
+
+        .server-info code {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 3px 8px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+        }
+
+        footer {
+            text-align: center;
+            margin-top: 40px;
+            color: #666;
+            font-size: 0.9em;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>⚡ Whisper</h1>
+            <p class="subtitle">Tony Stark's AI Assistant — MCP Server Dashboard</p>
+        </header>
+
+        <div class="status-bar">
+            <div class="status">
+                <div class="status-dot"></div>
+                <span>MCP Server Running on <code style="color: #ffd93d;">http://127.0.0.1:8000/sse</code></span>
+            </div>
+            <span id="server-status">✅ Connected</span>
+        </div>
+
+        <div class="server-info">
+            <strong>📡 About this interface:</strong><br>
+            This dashboard connects to the Whisper MCP Server running in the background. The server exposes AI tools that are called by the voice/chat agent. You can see all available tools below.
+        </div>
+
+        <div class="tools-grid">
+            <!-- Tool 1: World News -->
+            <div class="tool-card">
+                <div class="tool-icon">🌍</div>
+                <div class="tool-title">Global News Briefing</div>
+                <div class="tool-desc">Fetches the latest global headlines from BBC, CNBC, NYT, and Al Jazeera</div>
+                <button onclick="testTool('news')">Fetch News</button>
+                <div class="output" id="output-news">
+                    <div class="loading" id="loading-news">⏳ Loading...</div>
+                </div>
+            </div>
+
+            <!-- Tool 2: Finance News -->
+            <div class="tool-card">
+                <div class="tool-icon">📈</div>
+                <div class="tool-title">Finance News</div>
+                <div class="tool-desc">Get the latest finance and market headlines from major financial outlets</div>
+                <button onclick="testTool('finance')">Get Finance News</button>
+                <div class="output" id="output-finance">
+                    <div class="loading" id="loading-finance">⏳ Loading...</div>
+                </div>
+            </div>
+
+            <!-- Tool 3: System Info -->
+            <div class="tool-card">
+                <div class="tool-icon">💻</div>
+                <div class="tool-title">System Information</div>
+                <div class="tool-desc">Get current system info (OS, Python version, machine details)</div>
+                <button onclick="testTool('sysinfo')">Get System Info</button>
+                <div class="output" id="output-sysinfo">
+                    <div class="loading" id="loading-sysinfo">⏳ Loading...</div>
+                </div>
+            </div>
+
+            <!-- Tool 4: Current Time -->
+            <div class="tool-card">
+                <div class="tool-icon">🕐</div>
+                <div class="tool-title">Current Time</div>
+                <div class="tool-desc">Get current date and time in ISO 8601 format</div>
+                <button onclick="testTool('time')">Get Time</button>
+                <div class="output" id="output-time">
+                    <div class="loading" id="loading-time">⏳ Loading...</div>
+                </div>
+            </div>
+
+            <!-- Tool 5: Web Search -->
+            <div class="tool-card">
+                <div class="tool-icon">🔍</div>
+                <div class="tool-title">Web Search</div>
+                <div class="tool-desc">Search the web for any topic or question</div>
+                <input type="text" id="search-query" placeholder="Enter search query..." style="
+                    width: 100%;
+                    padding: 8px;
+                    background: rgba(255,255,255,0.1);
+                    border: 1px solid rgba(255,255,255,0.2);
+                    color: white;
+                    border-radius: 5px;
+                    margin-bottom: 10px;
+                ">
+                <button onclick="testTool('search')">Search</button>
+                <div class="output" id="output-search">
+                    <div class="loading" id="loading-search">⏳ Loading...</div>
+                </div>
+            </div>
+
+            <!-- Tool 6: World Monitor -->
+            <div class="tool-card">
+                <div class="tool-icon">🗺️</div>
+                <div class="tool-title">World Monitor</div>
+                <div class="tool-desc">Opens an interactive world map showing global events and trends</div>
+                <button onclick="testTool('worldmonitor')">Open World Monitor</button>
+                <div class="output" id="output-worldmonitor">
+                    <div class="loading" id="loading-worldmonitor">⏳ Loading...</div>
+                </div>
+            </div>
+        </div>
+
+        <footer>
+            <p>🔧 Whisper MCP Server v0.1.0 | Voice and tool backend for Whisper AI</p>
+            <p>Running at: <code>http://127.0.0.1:8000/sse</code></p>
+        </footer>
+    </div>
+
+    <script>
+        const SERVER_URL = "http://127.0.0.1:8000/sse";
+
+        async function testTool(toolName) {
+            const outputId = `output-${toolName}`;
+            const loadingId = `loading-${toolName}`;
+            const output = document.getElementById(outputId);
+            const loading = document.getElementById(loadingId);
+
+            // Show loading
+            if (loading) loading.style.display = 'block';
+            output.innerHTML = '';
+
+            try {
+                let message = '';
+
+                switch(toolName) {
+                    case 'news':
+                        message = '{"jsonrpc": "2.0", "id": 1, "method": "call_tool", "params": {"name": "get_world_news"}}';
+                        break;
+                    case 'finance':
+                        message = '{"jsonrpc": "2.0", "id": 1, "method": "call_tool", "params": {"name": "get_world_finance_news"}}';
+                        break;
+                    case 'sysinfo':
+                        message = '{"jsonrpc": "2.0", "id": 1, "method": "call_tool", "params": {"name": "get_system_info"}}';
+                        break;
+                    case 'time':
+                        message = '{"jsonrpc": "2.0", "id": 1, "method": "call_tool", "params": {"name": "get_current_time"}}';
+                        break;
+                    case 'search':
+                        const query = document.getElementById('search-query').value || 'AI news';
+                        message = `{"jsonrpc": "2.0", "id": 1, "method": "call_tool", "params": {"name": "search_web", "arguments": {"query": "${query}"}}}`;
+                        break;
+                    case 'worldmonitor':
+                        message = '{"jsonrpc": "2.0", "id": 1, "method": "call_tool", "params": {"name": "open_world_monitor"}}';
+                        break;
+                }
+
+                // Connect to SSE
+                const response = await fetch(SERVER_URL, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: message
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Server error: ${response.status}`);
+                }
+
+                const result = await response.json();
+                const text = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
+                
+                if (loading) loading.style.display = 'none';
+                output.innerHTML = `<pre>${escapeHtml(text)}</pre>`;
+            } catch (error) {
+                if (loading) loading.style.display = 'none';
+                output.innerHTML = `<span style="color: #ff6b6b;">❌ Error: ${error.message}</span><br><span style="color: #ffd93d;">💡 Tip: Make sure the MCP server is running on port 8000</span>`;
+            }
+        }
+
+        function escapeHtml(text) {
+            const map = {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
+            };
+            return text.replace(/[&<>"']/g, m => map[m]);
+        }
+
+        // Check server status on load
+        window.addEventListener('load', async () => {
+            try {
+                const response = await fetch(SERVER_URL, {method: 'HEAD'});
+                if (response.ok) {
+                    document.getElementById('server-status').innerHTML = '✅ Server is running!';
+                }
+            } catch (e) {
+                document.getElementById('server-status').innerHTML = '⚠️ Cannot connect to server';
+            }
+        });
+    </script>
+</body>
+</html>

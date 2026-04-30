@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Whisper - AI Dashboard</title>
+    <!-- Include LiveKit JS SDK from CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/livekit-client/dist/livekit-client.umd.min.js"></script>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #050505;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            flex-direction: column;
+            color: white;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            width: 100%;
+        }
+
+        /* Face Container */
+        .face {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 150px;
+            margin-bottom: 80px;
+        }
+
+        /* Glowing Eye */
+        .eye {
+            width: 120px;
+            height: 60px;
+            background: rgba(0, 255, 255, 0.9);
+            border-radius: 50% / 30%;
+            box-shadow: 
+                0 0 40px rgba(0, 255, 255, 0.8),
+                0 0 80px rgba(0, 255, 255, 0.6),
+                0 0 120px rgba(0, 255, 255, 0.4),
+                inset 0 0 20px rgba(255, 255, 255, 0.9);
+            animation: blink 4s infinite, glowPulse 2s infinite alternate;
+            position: relative;
+        }
+
+        .eye::after {
+            content: '';
+            position: absolute;
+            top: 15%;
+            left: 20%;
+            width: 30px;
+            height: 15px;
+            background: rgba(255, 255, 255, 0.8);
+            border-radius: 50%;
+            transform: rotate(-15deg);
+        }
+
+        @keyframes blink {
+            0%, 96%, 98% { height: 60px; opacity: 1; transform: scaleY(1); }
+            97% { height: 5px; opacity: 0.5; transform: scaleY(0.1); }
+        }
+
+        @keyframes glowPulse {
+            0% { box-shadow: 0 0 30px rgba(0, 255, 255, 0.7), 0 0 60px rgba(0, 255, 255, 0.5), inset 0 0 15px rgba(255, 255, 255, 0.8); }
+            100% { box-shadow: 0 0 50px rgba(0, 255, 255, 1), 0 0 100px rgba(0, 255, 255, 0.8), 0 0 150px rgba(0, 255, 255, 0.6), inset 0 0 25px rgba(255, 255, 255, 1); }
+        }
+
+        /* Voice Wave / Orb */
+        .voice-indicator {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            margin-top: 15px;
+            opacity: 1;
+            transition: opacity 0.3s ease;
+        }
+
+        .bar {
+            width: 8px;
+            height: 40px;
+            background: rgba(0, 255, 255, 0.8);
+            border-radius: 4px;
+            box-shadow: 0 0 15px rgba(0, 255, 255, 0.8);
+            animation: wave 1s infinite ease-in-out alternate;
+        }
+
+        .bar:nth-child(1) { animation-delay: 0.0s; height: 30px; }
+        .bar:nth-child(2) { animation-delay: 0.1s; height: 50px; }
+        .bar:nth-child(3) { animation-delay: 0.2s; height: 70px; }
+        .bar:nth-child(4) { animation-delay: 0.3s; height: 50px; }
+        .bar:nth-child(5) { animation-delay: 0.4s; height: 30px; }
+
+        @keyframes wave {
+            0% { transform: scaleY(0.5); opacity: 0.5; }
+            100% { transform: scaleY(1.5); opacity: 1; }
+        }
+
+        .transcript-container {
+            width: 80%;
+            max-width: 650px;
+            height: 250px;
+            background: rgba(0, 255, 255, 0.03);
+            border: 1px solid rgba(0, 255, 255, 0.15);
+            border-radius: 20px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-end;
+            text-align: center;
+            margin-bottom: 20px;
+            box-shadow: 0 0 30px rgba(0, 255, 255, 0.05) inset;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .transcript-content {
+            width: 100%;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            padding-bottom: 10px;
+            scrollbar-width: none;
+        }
+
+        .transcript-content::-webkit-scrollbar {
+            display: none;
+        }
+
+        .transcript-line {
+            font-size: 1.2rem;
+            line-height: 1.4;
+            opacity: 0;
+            animation: fadeIn 0.4s forwards;
+            max-width: 90%;
+            margin: 0 auto;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .transcript-line.agent {
+            color: rgba(0, 255, 255, 1);
+            text-shadow: 0 0 10px rgba(0, 255, 255, 0.4);
+            font-weight: 500;
+        }
+
+        .transcript-line.user {
+            color: rgba(255, 255, 255, 0.7);
+            font-style: italic;
+        }
+
+        /* Status & Controls */
+        .controls {
+            margin-top: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+            z-index: 10;
+        }
+
+        .status-text {
+            color: rgba(0, 255, 255, 0.8);
+            font-size: 1.5rem;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            text-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+        }
+
+        .btn {
+            background: transparent;
+            border: 2px solid rgba(0, 255, 255, 0.6);
+            color: rgba(0, 255, 255, 0.9);
+            padding: 12px 30px;
+            font-size: 1.2rem;
+            border-radius: 30px;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            transition: all 0.3s ease;
+            box-shadow: 0 0 15px rgba(0, 255, 255, 0.2) inset;
+        }
+
+        .btn:hover {
+            background: rgba(0, 255, 255, 0.2);
+            box-shadow: 0 0 20px rgba(0, 255, 255, 0.6), 0 0 20px rgba(0, 255, 255, 0.6) inset;
+            transform: scale(1.05);
+        }
+
+        .btn:active {
+            transform: scale(0.95);
+        }
+
+        /* Ambient background glow */
+        .ambient-glow {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 60vw;
+            height: 60vw;
+            background: radial-gradient(circle, rgba(0,255,255,0.05) 0%, rgba(0,0,0,0) 70%);
+            z-index: -1;
+            pointer-events: none;
+        }
+        
+        .idle-bars .bar {
+            animation: none;
+            transform: scaleY(0.2);
+            opacity: 0.3;
+        }
+        
+        .hidden {
+            display: none !important;
+        }
+
+    </style>
+</head>
+<body>
+    <div class="ambient-glow"></div>
+    <div class="container">
+        
+        <div class="face" id="face">
+            <div class="eye left-eye"></div>
+            <div class="eye right-eye"></div>
+        </div>
+
+        <div class="transcript-container" id="transcript-container">
+            <div class="transcript-content" id="transcript-content">
+                <div class="transcript-line user">System Initialized. Awaiting Connection.</div>
+            </div>
+            <div class="voice-indicator idle-bars hidden" id="voice-wave">
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <div class="status-text" id="status">System Standby</div>
+            <button class="btn" id="connect-btn" onclick="toggleConnect()">Initialize Whisper</button>
+        </div>
+    </div>
+
+    <!-- Hidden audio element for LiveKit to play incoming audio -->
+    <audio id="remote-audio" autoplay></audio>
+
+    <script>
+        let isConnected = false;
+        let room = null;
+
+        async function initLiveKit(url, token) {
+            room = new LivekitClient.Room({
+                adaptiveStream: true,
+                dynacast: true,
+            });
+
+            // Handle track subscription (when agent speaks)
+            room.on(LivekitClient.RoomEvent.TrackSubscribed, (track, publication, participant) => {
+                if (track.kind === LivekitClient.Track.Kind.Audio) {
+                    const audioElement = document.getElementById('remote-audio');
+                    track.attach(audioElement);
+                    document.getElementById('voice-wave').classList.remove('idle-bars');
+                    document.getElementById('status').innerText = "Whisper Speaking";
+                }
+            });
+
+            // Handle track unsubscribed
+            room.on(LivekitClient.RoomEvent.TrackUnsubscribed, (track) => {
+                track.detach();
+            });
+
+            // Handle transcriptions
+            const transcriptContent = document.getElementById('transcript-content');
+            const voiceWave = document.getElementById('voice-wave');
+            
+            let lastSegmentId = null;
+            let currentLineElement = null;
+
+            room.on(LivekitClient.RoomEvent.TranscriptionReceived, (segments, participant) => {
+                const isAgent = participant && !participant.isLocal;
+                const segment = segments[segments.length - 1];
+                
+                if (!segment || !segment.text.trim()) return;
+
+                // If it's a new segment, create a new line
+                if (segment.id !== lastSegmentId) {
+                    lastSegmentId = segment.id;
+                    currentLineElement = document.createElement('div');
+                    currentLineElement.className = `transcript-line ${isAgent ? 'agent' : 'user'}`;
+                    transcriptContent.appendChild(currentLineElement);
+                    
+                    // Auto-scroll
+                    transcriptContent.scrollTop = transcriptContent.scrollHeight;
+                    
+                    // Cleanup old lines
+                    while (transcriptContent.children.length > 8) {
+                        transcriptContent.removeChild(transcriptContent.firstChild);
+                    }
+                }
+
+                if (currentLineElement) {
+                    currentLineElement.innerText = segment.text;
+                }
+
+                if (isAgent) {
+                    voiceWave.classList.remove('hidden');
+                    voiceWave.classList.remove('idle-bars');
+                } else {
+                    voiceWave.classList.add('hidden');
+                    voiceWave.classList.add('idle-bars');
+                }
+            });
+
+            // Handle active speakers
+            room.on(LivekitClient.RoomEvent.ActiveSpeakersChanged, (speakers) => {
+                const agentSpeaking = speakers.some(p => !p.isLocal);
+                const userSpeaking = speakers.some(p => p.isLocal);
+                
+                const statusText = document.getElementById('status');
+                
+                if (agentSpeaking) {
+                    statusText.innerText = "Whisper Responding";
+                    voiceWave.classList.remove('hidden');
+                    voiceWave.classList.remove('idle-bars');
+                } else if (userSpeaking) {
+                    statusText.innerText = "Whisper Listening...";
+                    voiceWave.classList.add('idle-bars');
+                    voiceWave.classList.remove('hidden');
+                } else {
+                    statusText.innerText = "Online & Standing By";
+                    voiceWave.classList.add('idle-bars');
+                    setTimeout(() => {
+                        if (!statusText.innerText.includes("Responding") && !statusText.innerText.includes("Listening")) {
+                            voiceWave.classList.add('hidden');
+                        }
+                    }, 1500);
+                }
+            });
+
+            // Handle disconnection
+            room.on(LivekitClient.RoomEvent.Disconnected, (reason) => {
+                console.log("Disconnected from room:", reason);
+                isConnected = false;
+                document.getElementById('connect-btn').innerText = "Initialize Whisper";
+                document.getElementById('status').innerText = "System Standby";
+                voiceWave.classList.add('idle-bars');
+                voiceWave.classList.add('hidden');
+                
+                const errorLine = document.createElement('div');
+                errorLine.className = "transcript-line user";
+                errorLine.style.color = "#ff5555";
+                errorLine.innerText = "Connection Lost. Please check your internet and API keys.";
+                transcriptContent.appendChild(errorLine);
+            });
+
+            try {
+                // Join the room
+                await room.connect(url, token);
+                
+                // Publish our local microphone
+                await room.localParticipant.setMicrophoneEnabled(true);
+                
+                document.getElementById('status').innerText = "Online & Listening";
+            } catch (error) {
+                console.error("Could not connect:", error);
+                document.getElementById('status').innerText = "Connection Failed";
+                
+                // Reset UI state manually to avoid recursive loops
+                isConnected = false;
+                document.getElementById('connect-btn').innerText = "Initialize Whisper";
+                
+                const errorLine = document.createElement('div');
+                errorLine.className = "transcript-line user";
+                errorLine.style.color = "#ff5555";
+                errorLine.innerText = "Fatal: " + error.message + ". Check your API keys and Internet.";
+                transcriptContent.appendChild(errorLine);
+            }
+        }
+
+        function disconnectLiveKit() {
+            if (room) {
+                room.disconnect();
+                room = null;
+            }
+        }
+
+        async function toggleConnect() {
+            const btn = document.getElementById('connect-btn');
+            const status = document.getElementById('status');
+            const wave = document.getElementById('voice-wave');
+
+            if (!isConnected) {
+                status.innerText = "Initializing Backend...";
+                
+                if (window.pywebview) {
+                    // Call Python backend to start processes
+                    await window.pywebview.api.connect();
+                    
+                    // Get credentials
+                    const creds = await window.pywebview.api.get_credentials();
+                    
+                    // Connect frontend LiveKit
+                    status.innerText = "Connecting Mic & Speakers...";
+                    await initLiveKit(creds.url, creds.token);
+                    
+                    btn.innerText = "Disconnect";
+                    isConnected = true;
+                } else {
+                    // For UI preview only
+                    btn.innerText = "Disconnect";
+                    status.innerText = "Online (Preview Mode)";
+                    isConnected = true;
+                }
+            } else {
+                // Disconnect LiveKit frontend
+                disconnectLiveKit();
+
+                if (window.pywebview) {
+                    // Stop python backend
+                    await window.pywebview.api.disconnect();
+                }
+
+                btn.innerText = "Initialize Whisper";
+                status.innerText = "System Standby";
+                wave.classList.add('idle-bars');
+                isConnected = false;
+            }
+        }
+    </script>
+</body>
+</html>

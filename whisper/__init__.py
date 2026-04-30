@@ -1,0 +1,1 @@
+# Whisper MCP Server Package

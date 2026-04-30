@@ -1,0 +1,48 @@
+[project]
+name = "Whisper_AI"
+version = "0.1.0"
+description = "Whisper — A multi-device AI assistant"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastmcp",
+    "httpx",
+    "livekit-agents[deepgram,groq,openai,sarvam,silero]>=1.5.1",
+    "livekit-plugins-google>=1.5.1",
+    "python-dotenv",
+    "pywebview>=5.1.1",
+    "pycaw>=3.1.3",
+    "comtypes>=1.4.2",
+    "livekit-api>=1.1.0",
+    "livekit-plugins-elevenlabs>=1.5.1",
+    "pillow>=12.2.0",
+    "duckduckgo-search>=8.1.1",
+    "google-api-python-client",
+    "google-auth-httplib2",
+    "google-auth-oauthlib",
+    "fastapi",
+    "uvicorn",
+    # Database
+    "sqlalchemy>=2.0",
+    "psycopg2-binary>=2.9",  # PostgreSQL adapter
+    "alembic>=1.13",  # Database migrations
+    # Advanced features
+    "redis>=5.0",  # Caching and sessions
+    "langchain>=0.1",  # Context management and RAG
+    "pinecone-client>=3.0",  # Vector database for semantic search (optional)
+    "cryptography>=41.0",  # Encryption for sensitive data
+    # Video & Object Detection (FREE - completely local)
+    "opencv-python>=4.8",  # Computer vision library
+    "ultralytics>=8.0",  # YOLOv8 object detection (free, lightweight, runs locally)
+]
+
+[project.scripts]
+whisper = "server:main"
+whisper_voice = "whisper_agent:dev" # Points to the wrapper
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["server.py"]

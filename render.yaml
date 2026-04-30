@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: whisper-backend
+    env: python
+    buildCommand: "curl -LsSf https://astral.sh/uv/install.sh | sh && $HOME/.cargo/bin/uv sync"
+    startCommand: "bash start.sh"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: LIVEKIT_URL
+        sync: false
+      - key: LIVEKIT_API_KEY
+        sync: false
+      - key: LIVEKIT_API_SECRET
+        sync: false
+      - key: GROQ_API_KEY_1
+        sync: false
+      - key: DEEPGRAM_API_KEY
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_API_KEY
+        sync: false
+      - key: GOOGLE_CREDENTIALS_JSON
+        sync: false
+      - key: GOOGLE_TOKEN_JSON
+        sync: false
