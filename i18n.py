@@ -18,7 +18,7 @@ import os
 # SUPPORTED LANGUAGES
 # ============================================================================
 
-class Language(str, Enum):
+class Language(Enum):
     """Supported languages with language codes and names."""
     ENGLISH = ("en", "English")
     SPANISH = ("es", "Español")
@@ -37,6 +37,7 @@ class Language(str, Enum):
     TURKISH = ("tr", "Türkçe")
 
     def __init__(self, code: str, name: str):
+        self._value_ = code
         self.code = code
         self.native_name = name
 
