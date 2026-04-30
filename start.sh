@@ -1,17 +1,15 @@
 #!/bin/bash
 set -e
 
-# Railway/Render provides the $PORT environment variable. Default to 8000 if not set.
-PORT="${PORT:-8000}"
+# Railway/Render provides the $PORT environment variable. Default to 8080 if not set.
+export PORT="${PORT:-8080}"
 
 echo "Starting Whisper Cloud API on port $PORT..."
-echo "Listening on 0.0.0.0:$PORT"
 
-# Start the FastAPI web service in the background
-uv run uvicorn cloud_api:app --host 0.0.0.0 --port $PORT --log-level info &
-API_PID=$!
-
+# Start the LiveKit voice agent in the background
 echo "Starting Whisper Voice Agent..."
-# Start the LiveKit voice agent in the foreground so the container stays alive
-# If voice agent fails, the FastAPI service will still be running
-uv run python whisper_agent.py dev || (echo "Voice agent failed, but API continues running"; tail -f /dev/null)
+uv run python whisper_agent.py dev &
+
+# Start the FastAPI web service in the foreground
+echo "Starting Uvicorn..."
+exec uv run uvicorn cloud_api:app --host 0.0.0.0 --port $PORT --log-level info

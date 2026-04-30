@@ -34,7 +34,7 @@ RUN uv sync --frozen
 RUN chmod +x start.sh
 
 # Expose the port (Railway will set the PORT environment variable)
-EXPOSE 8000
+EXPOSE 8080
 
 # Run the unified startup script
 CMD ["bash", "start.sh"]
