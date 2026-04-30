@@ -6,8 +6,9 @@ Minimal API usage - only sends summaries to Groq for intelligent responses
 
 import os
 import json
+import time
 from datetime import datetime
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, Any
 import asyncio
 from dataclasses import dataclass, asdict
 import logging
@@ -62,10 +63,6 @@ class ObjectDetector:
     def __init__(self, model_size: str = "nano"):
         """
         Initialize YOLOv8 model
-        
-        Args:
-            model_size: "nano" (fastest, low accuracy) to "large" (slower, high accuracy)
-                       "nano" is recommended for real-time video (30+ FPS)
         """
         _ensure_imports()
         self.model_size = model_size
@@ -81,27 +78,24 @@ class ObjectDetector:
         """Load YOLOv8 model"""
         try:
             model_map = {
-                "nano": "yolov8n.pt",      # 3.2M params - Real-time, ~30 FPS
-                "small": "yolov8s.pt",     # 11.2M params - Balanced
-                "medium": "yolov8m.pt",    # 25.9M params - Better accuracy
-                "large": "yolov8l.pt",     # 43.7M params - High accuracy
+                "nano": "yolov8n.pt",
+                "small": "yolov8s.pt",
+                "medium": "yolov8m.pt",
+                "large": "yolov8l.pt",
             }
             
             model_name = model_map.get(self.model_size, "yolov8n.pt")
             logger.info(f"[Whisper] Loading YOLOv8-{self.model_size} model...")
             
             self.model = YOLO(model_name)
-            
-            # Store class names (80 COCO classes)
             self.class_names = self.model.names
             logger.info(f"[Whisper] Object detector ready: {len(self.class_names)} classes")
             
         except Exception as e:
             logger.error(f"[Whisper] Failed to load object detection model: {e}")
-            # Don't raise, just keep self.model as None
             self.model = None
 
-    def detect_frame(self, frame: "np.ndarray", confidence_threshold: float = 0.5) -> Dict:
+    def detect_frame(self, frame: Any, confidence_threshold: float = 0.5) -> Dict:
         """
         Detect objects in a single frame
         """
@@ -139,3 +133,49 @@ class ObjectDetector:
         except Exception as e:
             logger.error(f"[Whisper] Detection error: {e}")
             return {"objects": [], "error": str(e)}
+
+class VideoCameraManager:
+    """Manages local camera access and frame capture"""
+    def __init__(self, camera_index: int = 0):
+        _ensure_imports()
+        self.camera_index = camera_index
+        self.cap = None
+        self.is_running = False
+
+    def start(self):
+        if cv2 is None: return False
+        self.cap = cv2.VideoCapture(self.camera_index)
+        self.is_running = self.cap.isOpened()
+        return self.is_running
+
+    def stop(self):
+        self.is_running = False
+        if self.cap:
+            self.cap.release()
+            self.cap = None
+
+    def get_frame(self):
+        if not self.is_running or self.cap is None:
+            return None
+        ret, frame = self.cap.read()
+        return frame if ret else None
+
+class RealTimeDetectionProcessor:
+    """Orchestrates the detection loop"""
+    def __init__(self, detector: ObjectDetector, camera: VideoCameraManager):
+        self.detector = detector
+        self.camera = camera
+        self.current_detections = []
+        self._stop_event = asyncio.Event()
+
+    async def run_loop(self, interval: float = 0.5):
+        self._stop_event.clear()
+        while not self._stop_event.is_set():
+            frame = self.camera.get_frame()
+            if frame is not None:
+                results = self.detector.detect_frame(frame)
+                self.current_detections = results.get("objects", [])
+            await asyncio.sleep(interval)
+
+    def stop(self):
+        self._stop_event.set()
