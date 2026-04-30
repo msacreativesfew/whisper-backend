@@ -17,11 +17,14 @@ try:
     import cv2
     import numpy as np
 except ImportError:
+    cv2 = None
+    np = None
     print("[Whisper] OpenCV not installed. Install with: pip install opencv-python")
 
 try:
     from ultralytics import YOLO
 except ImportError:
+    YOLO = None
     print("[Whisper] YOLOv8 not installed. Install with: pip install ultralytics")
 
 logger = logging.getLogger(__name__)
@@ -86,7 +89,7 @@ class ObjectDetector:
             logger.error(f"[Whisper] Failed to load object detection model: {e}")
             raise
 
-    def detect_frame(self, frame: np.ndarray, confidence_threshold: float = 0.5) -> Dict:
+    def detect_frame(self, frame: "np.ndarray", confidence_threshold: float = 0.5) -> Dict:
         """
         Detect objects in a single frame
         
@@ -304,7 +307,7 @@ class VideoCameraManager:
             return True
         return False
 
-    def get_frame(self) -> Optional[np.ndarray]:
+    def get_frame(self) -> Optional["np.ndarray"]:
         """Get current frame from active camera"""
         if self.active_camera is None:
             return None
